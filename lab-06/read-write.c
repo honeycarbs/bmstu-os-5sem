@@ -27,14 +27,14 @@ int val = 0;
 
 void startRead() {
   InterlockedIncrement(&_waiting_readers);
-  if (_active_writer || (WaitForSingleObject(_can_write, 0) == WAIT_OBJECT_0 &&
-                         _waiting_writers)) {
+  WaitForSingleObject(_mutex, INFINITE);
+  if (_waiting_writers || WaitForSingleObject(_can_write, 0) == WAIT_OBJECT_0) {
     WaitForSingleObject(_can_read, INFINITE);
   }
-  WaitForSingleObject(_mutex, INFINITE);
-  InterlockedDecrement(&_waiting_readers);
-  InterlockedIncrement(&_active_readers);
+
   SetEvent(_can_read);
+  InterlockedIncrement(&_active_readers);
+  InterlockedDecrement(&_waiting_readers);
   ReleaseMutex(_mutex);
 }
 
@@ -55,7 +55,7 @@ DWORD WINAPI readerRoutine(CONST LPVOID lp_params) {
     sinterv = READER_TIME_TO + rand() % DIFF;
     Sleep(sinterv);
     startRead();
-    printf("Reader #%d -> %d (slept for %3d ms)\n", inx, val, sinterv);
+    printf("reader #%d -> %d (slept for %3d ms)\n", inx, val, sinterv);
     stopRead();
   }
   return 0;
@@ -63,7 +63,7 @@ DWORD WINAPI readerRoutine(CONST LPVOID lp_params) {
 
 void startWrite() {
   InterlockedIncrement(&_waiting_writers);
-  if (_active_writer || _active_readers > 0) {
+  if (_active_writer || WaitForSingleObject(_can_read, 0) == WAIT_OBJECT_0) {
     WaitForSingleObject(_can_write, INFINITE);
   }
   InterlockedDecrement(&_waiting_writers);
